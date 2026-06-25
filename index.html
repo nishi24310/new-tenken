@@ -1104,7 +1104,8 @@ function selCust(el) {
   document.getElementById('f-name').value = name;
   document.getElementById('f-addr').value = addr;
   document.getElementById('f-tel').value  = tel;
-  if (h.sales) { document.getElementById('f-sales').value = h.sales; }
+var sales = el.getAttribute('data-sales');
+if (sales) { document.getElementById('f-sales').value = sales; }
   document.getElementById('sel-name-disp').textContent = name + ' 様' + (no ? '（No.' + no + '）' : '');
   document.getElementById('sel-meta-disp').textContent = addr + (tel ? '　' + tel : '');
   document.getElementById('selected-cust').style.display = 'block';
