@@ -987,26 +987,26 @@ function tryParseCSV(text) {
     // 「顧客NO.」「顧客名」「建設地」が含まれる行を探す
     // ======================================================
     var headerRow = -1;
-    var colNo = 0, colName = 1, colTel = 3, colAddr = 2, colSales = -1;
+var colNo = 2, colName = 3, colTel = 4, colAddr = 5, colSales = 10;
 
-    for (var h = 0; h < Math.min(lines.length, 10); h++) {
-      var hcols = splitLine(lines[h]);
-      for (var hc = 0; hc < hcols.length; hc++) {
-        var cell = hcols[hc].trim();
-        if (cell === '顧客NO.' || cell === '顧客No.' || cell === '顧客NO') {
-          colNo   = hc;
-          headerRow = h;
-        }
-        if (cell === '顧客名') colName = hc;
-        if (cell === '電話番号') colTel  = hc;
-        if (cell === '建設地')   colAddr = hc;
-        if (cell === '営業担当' || cell === '担当者') colSales = hc;
-      }
-      if (headerRow >= 0) break;
+for (var h = 0; h < Math.min(lines.length, 10); h++) {
+  var hcols = splitLine(lines[h]);
+  for (var hc = 0; hc < hcols.length; hc++) {
+    var cell = hcols[hc].trim();
+    if (cell === '顧客NO.' || cell === '顧客No.' || cell === '顧客NO' || cell === '顧客NO.') {
+      colNo   = hc;
+      headerRow = h;
     }
+    if (cell === '顧客名') colName = hc;
+    if (cell === '電話番号') colTel  = hc;
+    if (cell === '建設地')   colAddr = hc;
+    if (cell === '営業' || cell === '営業担当' || cell === '担当者') colSales = hc;
+  }
+  if (headerRow >= 0) break;
+}
 
-    // データ開始行（ヘッダーの次の行から）
-    var startRow = headerRow >= 0 ? headerRow + 1 : 1;
+// このCSVはrow0がヘッダー、row1が空、row2がサブヘッダー、row3以降がデータ
+var startRow = headerRow >= 0 ? headerRow + 3 : 3;
 
     for (var ln = startRow; ln < lines.length; ln++) {
       var line = lines[ln];
