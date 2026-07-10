@@ -1216,6 +1216,101 @@ function importJSON(input) {
   r.readAsText(file, 'UTF-8');
   input.value = '';
 }  
+/**
+ * 【点検アプリ(new-tenken/index.html)への追加コード】
+ *
+ * 追加場所:
+ * 1. 下記の関数群を、</script>の直前(既存のDOMContentLoaded等の後ろ)に追加してください
+ * 2. 既存の onsiteSend() 関数の中、outputPdf(false); の次の行に
+ *    sendFaultsToManagementSystem();
+ *    を1行追加してください(下の「変更例」を参照)
+ * 3. FAULT_WEBAPP_URL を、GAS側でデプロイしたウェブアプリのURLに書き換えてください
+ */
+
+// ==== 故障・メンテナンス管理システム連携 ====
+const FAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwvK5FljnI35fTPK1vInBeyMoKPVNyBy0OXzbe761VVZRbpQtc-vsaxZz6YT5qt-ksX/exec';
+const FAULT_QUEUE_KEY = 'ie_keikaku_fault_queue';
+
+// 「要修繕」項目を管理システムへ送信(キュー方式・オフライン対応)
+function sendFaultsToManagementSystem() {
+  const propertyName = ((v('f-name') ? v('f-name') + '様 ' : '') + (v('f-addr') || '')).trim();
+  const inspector = v('f-insp') || '';
+
+  ALL.forEach(function (item) {
+    const it = S.items[item.key];
+    if (!it || it.status !== '要修繕') return;
+
+    queueFaultReport({
+      propertyName: propertyName,
+      inspector: inspector,
+      issueDetail: item.label + '：' + (it.note || '状況の記載なし'),
+      urgency: '緊急',
+      assignee: inspector
+    });
+  });
+
+  flushFaultQueue();
+}
+
+function queueFaultReport(report) {
+  const queue = getFaultQueue();
+  queue.push(report);
+  localStorage.setItem(FAULT_QUEUE_KEY, JSON.stringify(queue));
+}
+
+function getFaultQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(FAULT_QUEUE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+// キューにある未送信レポートを順に送信。失敗したものはキューに残して次回リトライ
+function flushFaultQueue() {
+  const queue = getFaultQueue();
+  if (!queue.length) return;
+
+  const remaining = [];
+  let sentCount = 0;
+
+  const sendNext = function (i) {
+    if (i >= queue.length) {
+      localStorage.setItem(FAULT_QUEUE_KEY, JSON.stringify(remaining));
+      if (sentCount > 0) showToast('✅ 故障報告 ' + sentCount + '件を送信しました');
+      return;
+    }
+    fetch(FAULT_WEBAPP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' }, // CORS回避のためtext/plainで送信(GAS側でJSON.parseする)
+      body: JSON.stringify(queue[i])
+    }).then(function () {
+      sentCount++;
+      sendNext(i + 1);
+    }).catch(function () {
+      remaining.push(queue[i]); // 送信失敗 → キューに残す
+      sendNext(i + 1);
+    });
+  };
+
+  sendNext(0);
+}
+
+// アプリ起動時、電波が繋がったタイミングで未送信キューの再送を試みる
+document.addEventListener('DOMContentLoaded', function () {
+  flushFaultQueue();
+});
+
+/**
+ * 【変更例】既存の onsiteSend() 関数を以下のように変更:
+ *
+ * function onsiteSend() {
+ *   outputPdf(false);
+ *   sendFaultsToManagementSystem();   // ← この行を追加
+ *
+ *   var saveData = {
+ *     ...(既存のコードはそのまま)
+ */
  </script>
 </body>
 </html>
