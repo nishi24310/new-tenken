@@ -800,6 +800,7 @@ var SAVE_KEY = 'ie_keikaku_tenken_save';
 function onsiteSend() {
   // お客様用PDFを出力
   outputPdf(false);
+  sendFaultsToManagementSystem();   //
   // 写真を除いたデータを一時保存（写真はBase64で重いので別途）
   var saveData = {
     type: S.type,
