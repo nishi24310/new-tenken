@@ -1301,16 +1301,16 @@ document.addEventListener('DOMContentLoaded', function () {
   flushFaultQueue();
 });
 
-/**
- * 【変更例】既存の onsiteSend() 関数を以下のように変更:
- *
- * function onsiteSend() {
- *   outputPdf(false);
- *   sendFaultsToManagementSystem();   // ← この行を追加
- *
- *   var saveData = {
- *     ...(既存のコードはそのまま)
- */
+/
+
+ 
+ function onsiteSend() {
+ outputPdf(false);
+ sendFaultsToManagementSystem();   // ← この行を追加
+ 
+ var saveData = {
+ 
+ /
  </script>
 </body>
 </html>
