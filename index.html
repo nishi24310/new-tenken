@@ -1301,12 +1301,6 @@ function flushFaultQueue() {
 document.addEventListener('DOMContentLoaded', function () {
   flushFaultQueue();
 });
-function onsiteSend() {
-  // お客様用PDFを出力
-  outputPdf(false);
-  sendFaultsToManagementSystem();   // ← この行を追加
-  // 写真を除いたデータを一時保存（写真はBase64で重いので別途）
-  var saveData = {
 </script>
 </body>
 </html>
