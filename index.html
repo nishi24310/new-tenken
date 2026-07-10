@@ -1217,6 +1217,76 @@ function importJSON(input) {
   r.readAsText(file, 'UTF-8');
   input.value = '';
 }  
+// ==== 故障・メンテナンス管理システム連携 ====
+const FAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwvK5FljnI35fTPK1vInBeyMoKPVNyBy0OXzbe761VVZRbpQtc-vsaxZz6YT5qt-ksX/exec';
+const FAULT_QUEUE_KEY = 'ie_keikaku_fault_queue';
+
+function sendFaultsToManagementSystem() {
+  const propertyName = ((v('f-name') ? v('f-name') + '様 ' : '') + (v('f-addr') || '')).trim();
+  const inspector = v('f-insp') || '';
+
+  ALL.forEach(function (item) {
+    const it = S.items[item.key];
+    if (!it || it.status !== '要修繕') return;
+
+    queueFaultReport({
+      propertyName: propertyName,
+      inspector: inspector,
+      issueDetail: item.label + '：' + (it.note || '状況の記載なし'),
+      urgency: '緊急',
+      assignee: inspector
+    });
+  });
+
+  flushFaultQueue();
+}
+
+function queueFaultReport(report) {
+  const queue = getFaultQueue();
+  queue.push(report);
+  localStorage.setItem(FAULT_QUEUE_KEY, JSON.stringify(queue));
+}
+
+function getFaultQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(FAULT_QUEUE_KEY) || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function flushFaultQueue() {
+  const queue = getFaultQueue();
+  if (!queue.length) return;
+
+  const remaining = [];
+  let sentCount = 0;
+
+  const sendNext = function (i) {
+    if (i >= queue.length) {
+      localStorage.setItem(FAULT_QUEUE_KEY, JSON.stringify(remaining));
+      if (sentCount > 0) showToast('✅ 故障報告 ' + sentCount + '件を送信しました');
+      return;
+    }
+    fetch(FAULT_WEBAPP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(queue[i])
+    }).then(function () {
+      sentCount++;
+      sendNext(i + 1);
+    }).catch(function () {
+      remaining.push(queue[i]);
+      sendNext(i + 1);
+    });
+  };
+
+  sendNext(0);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  flushFaultQueue();
+});
 </script>
 </body>
 </html>
