@@ -397,17 +397,23 @@ textarea{min-height:72px;resize:vertical;}
 // 点検項目定義
 // ============================================================
 const EXT = [
-  {key:'exterior_wall', label:'外壁・防水', hint:'傷・汚れ・欠け、塗り壁の割れ・クラック・劣化'},
+  {key:'exterior_wall', label:'外壁・コーキング', hint:'傷・汚れ・欠け、塗り壁の割れ・クラック・劣化、コーキングの剥離・ひび割れ'},
+  {key:'foundation_drip', label:'基礎・水切り', hint:'基礎のひび割れ・欠け、水切りの錆・変形・浮き'},
   {key:'tile',          label:'タイル・左官', hint:'傷・破損、土間モルタルの汚れ・クラック'},
   {key:'roof',          label:'屋根・バルコニー', hint:'すが漏り', is2y:true},
   {key:'ext_other',     label:'外部その他', hint:'アスファルト・物置・カーポート・防草シート・スギナ'},
   {key:'maint_ext',     label:'メンテ状況等（外）', hint:'デッキ・木柱・梁・ウッドフェンス等の割れ・変形・劣化'},
 ];
 const INT = [
-  {key:'entrance',      label:'玄関ドア・サッシ', hint:'傷・汚れ・欠け'},
+  {key:'entrance_door', label:'玄関ドア', hint:'傷・汚れ・欠け、建付け不良'},
+  {key:'sash',          label:'サッシ', hint:'傷・汚れ・欠け、開閉不良・気密不良'},
   {key:'fixtures',      label:'建具', hint:'傷・軽微な隙間・反り'},
   {key:'interior',      label:'内装仕上', hint:'傷・汚れ・隙間、乾燥によるライン・隙間'},
-  {key:'underfloor',    label:'床下', hint:'（2年点検時は断熱空間のみ）', is2y:true},
+  {key:'sealing',       label:'シーリング', hint:'室内各所シーリングの剥離・ひび割れ'},
+  {key:'foundation_insulation', label:'基礎断熱床下', hint:'断熱材の浮き・剥がれ、基礎断熱部分の異常（2年点検時は断熱空間のみ）', is2y:true},
+  {key:'underfloor',    label:'床下', hint:'土台・大引・束の劣化、シロアリ被害、湿気・カビ'},
+  {key:'heating',       label:'暖房設備', hint:'温水暖房・パネルヒーター等の動作確認、異音・水漏れ'},
+  {key:'hot_water',     label:'給湯設備', hint:'給湯器の動作確認、エラー表示、配管の水漏れ'},
   {key:'equipment',     label:'設備機器', hint:'説明書による維持管理'},
   {key:'int_other',     label:'内部その他', hint:'排水管の詰まり、階段・枠材等の乾燥による隙間'},
   {key:'maint_int',     label:'メンテ状況等（内）', hint:'給気口・排気口・レンジフード等の清掃確認'},
@@ -789,7 +795,9 @@ ${v('f-comment') ? `<div class="sec">【総合コメント】</div>
   <p style="margin-top:10px;">${today}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;氏名：${v('f-name')}</p>
 </div>
 <div class="foot">IE KEIKAKU 点検報告システム</div>
-</div></body></html>`;
+</div>
+<script>window.onload = function () { window.print(); };</script>
+</body></html>`;
 }
 
 // ============================================================
