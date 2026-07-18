@@ -797,10 +797,26 @@ ${v('f-comment') ? `<div class="sec">【総合コメント】</div>
 <div class="foot">IE KEIKAKU 点検報告システム</div>
 </div>
 <div class="no-print" style="max-width:720px;margin:14px auto 0;">
-  <button onclick="window.print()" style="width:100%;padding:12px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:bold;">📤 PDFとして共有・送信</button>
+  <button id="share-btn" onclick="shareOrPrintReport()" style="width:100%;padding:12px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:bold;">📤 PDFとして共有・送信</button>
 </div>
 <style>@media print { .no-print { display: none !important; } }</style>
-<script>window.onload = function () { window.print(); };<\/script>
+<script>
+function shareOrPrintReport() {
+  if (navigator.share && navigator.canShare) {
+    fetch(window.location.href).then(function (res) { return res.blob(); }).then(function (blob) {
+      var file = new File([blob], '点検報告書.html', { type: 'text/html' });
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: '点検報告書' }).catch(function () {});
+      } else {
+        window.print();
+      }
+    }).catch(function () { window.print(); });
+  } else {
+    window.print();
+  }
+}
+window.onload = shareOrPrintReport;
+<\/script>
 </body></html>`;
 }
 
