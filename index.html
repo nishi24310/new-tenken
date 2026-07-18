@@ -796,6 +796,10 @@ ${v('f-comment') ? `<div class="sec">【総合コメント】</div>
 </div>
 <div class="foot">IE KEIKAKU 点検報告システム</div>
 </div>
+<div class="no-print" style="max-width:720px;margin:14px auto 0;">
+  <button onclick="window.print()" style="width:100%;padding:12px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:bold;">📤 PDFとして共有・送信</button>
+</div>
+<style>@media print { .no-print { display: none !important; } }</style>
 <script>window.onload = function () { window.print(); };<\/script>
 </body></html>`;
 }
