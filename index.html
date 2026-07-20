@@ -193,6 +193,16 @@ textarea{min-height:72px;resize:vertical;}
 #pagePdf .logo{font-weight:bold;font-size:12px;color:#1a3a5c;margin-bottom:4px;}
 #pagePdf .sign{margin-top:16px;border:1px solid #ccc;padding:9px 12px;font-size:10.5px;}
 #pagePdf .foot{margin-top:10px;text-align:right;font-size:9px;color:#aaa;}
+
+/* ===== 印刷（ネイティブ「PDFとして保存」）用 =====
+   html2canvas/jsPDFや共有APIに頼らず、OS標準の印刷機能でPDF化する場合の設定。
+   スマホのアプリ内ブラウザ等でBlob共有・ダウンロードが動かない環境でも、
+   ブラウザの印刷機能自体は動くことが多いため、最終手段として用意。 */
+@media print{
+  body *{visibility:hidden;}
+  #pagePdf, #pagePdf *{visibility:visible;}
+  #pagePdf{position:absolute;left:0;top:0;width:100%;}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
@@ -378,13 +388,25 @@ textarea{min-height:72px;resize:vertical;}
     <div class="card-bd" id="conf-body"></div>
   </div>
 
+  <div class="card" id="pdf-link-box" style="display:none;">
+    <div class="card-hd">📄 PDFリンク</div>
+    <div class="card-bd">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">お客様やLINE WORKS等にこちらのリンクを共有してください（タップでPDFが開きます）</p>
+      <a id="pdf-link-a" href="#" target="_blank" rel="noopener" style="word-break:break-all;font-size:12px;color:var(--navy2);font-weight:700;display:block;margin-bottom:10px;"></a>
+      <button class="btn btn-s" style="flex:none;width:100%;" onclick="copyPdfLink()">📋 リンクをコピー</button>
+    </div>
+  </div>
+
   <div class="nav" style="flex-direction:column;gap:10px;">
    <button class="btn btn-pdf" onclick="onsiteSend()">📤 現地送信：お客様用PDF＋一時保存</button>
+<button class="btn btn-s" style="flex:none;width:100%;background:#fff;border:1.5px solid var(--navy2);color:var(--navy2);" onclick="printPdf(false)">🖨️ うまく送信できない場合：印刷してPDF保存（お客様用）</button>
 <button class="btn btn-g" onclick="outputPdf(true)">📁 保管用PDF（写真あり）を共有・保存</button>
+<button class="btn btn-s" style="flex:none;width:100%;background:#fff;border:1.5px solid var(--ok);color:var(--ok);" onclick="printPdf(true)">🖨️ うまく送信できない場合：印刷してPDF保存（保管用）</button>
 <button class="btn" style="background:#6b7c93;color:#fff;" onclick="exportJSON()">💾 JSONファイルを出力（PC間転送用）</button>
 <button class="btn btn-s" style="flex:none;width:100%;" onclick="goPage(2)">← 戻る</button>
   </div>
   <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:12px;">「現地送信」でお客様用PDFを出力＋データを一時保存します<br>帰社後に写真を追加して保管用PDFを出力できます</p>
+  <p style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.7;">📱 スマホで自動送信がうまくいかない場合は「印刷してPDF保存」をお試しください<br>iPhone：印刷画面が開いたらプレビューを2本指でピンチ（拡大）→共有アイコンから保存・送信<br>Android：印刷画面の「保存先」で「PDFとして保存」を選択</p>
 </div>
 
 <!-- ========== PAGE DONE ========== -->
@@ -403,6 +425,15 @@ textarea{min-height:72px;resize:vertical;}
 <div id="pagePdf"></div>
 
 <script>
+// ============================================================
+// PDFアップロード設定
+// ============================================================
+// PDFをGoogleドライブに保存してURL（リンク）を発行するGAS Webアプリのexec URL。
+// iPhone/Android（特にLINE WORKS等アプリ内ブラウザ）ではその場でのファイル共有・
+// ダウンロードが機能しない/不安定な場合があるため、可能ならこちらのURL方式を優先する。
+// 未設定（空文字）の場合は自動的に端末上での共有／ダウンロード方式にフォールバックする。
+const PDF_UPLOAD_URL = ''; // 例: 'https://script.google.com/macros/s/XXXXXXXXXXXX/exec'
+
 // ============================================================
 // 点検項目定義
 // ============================================================
@@ -713,6 +744,65 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// GAS Webアプリ（Code.gs参照）にPDFを送信し、Googleドライブ上の共有URLを受け取る。
+// Content-Typeをtext/plainにしてプリフライト(OPTIONS)を発生させないのがポイント
+// （メール通知のsendNotification()と同じ手法）。
+async function uploadPdfAndGetUrl(blob, filename) {
+  if (!PDF_UPLOAD_URL) return null;
+  const base64 = await blobToBase64(blob);
+  const res = await fetch(PDF_UPLOAD_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ filename, mimeType: 'application/pdf', base64 })
+  });
+  const data = await res.json();
+  if (!data || !data.ok) throw new Error((data && data.error) || 'アップロードに失敗しました');
+  return data; // {ok:true, url, downloadUrl, fileId}
+}
+
+async function showPdfLink(url, filename) {
+  // まずURL共有（ファイル共有よりずっと多くの環境・アプリ内ブラウザで動作する）を試す
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: filename, text: '点検報告書', url: url });
+      showToast('✅ PDFのリンクを共有しました');
+    } catch (e) {
+      // キャンセル・未対応でもリンク表示自体は行う
+    }
+  } else {
+    showToast('📄 PDFのリンクを発行しました');
+  }
+  const box = document.getElementById('pdf-link-box');
+  const a = document.getElementById('pdf-link-a');
+  if (box && a) {
+    a.href = url;
+    a.textContent = url;
+    box.style.display = 'block';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function copyPdfLink() {
+  const a = document.getElementById('pdf-link-a');
+  if (!a || !a.href) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(a.href)
+      .then(() => showToast('📋 リンクをコピーしました'))
+      .catch(() => showToast('コピーに失敗しました。リンクを長押ししてコピーしてください。'));
+  } else {
+    showToast('コピーに失敗しました。リンクを長押ししてコピーしてください。');
+  }
+}
+
 async function outputPdf(withPhotos) {
   const container = document.getElementById('pagePdf');
   showLoading('PDFを作成中...');
@@ -748,8 +838,23 @@ async function outputPdf(withPhotos) {
     const blob = pdf.output('blob');
     const custName = v('f-name') || '未入力';
     const filename = (withPhotos ? '保管用' : 'お客様用') + '_点検報告書_' + custName + '.pdf';
-    const file = new File([blob], filename, { type: 'application/pdf' });
 
+    // 1) URL方式（設定されていれば最優先）：iPhone/Androidのアプリ内ブラウザで
+    //    ファイル共有・ダウンロードが動かない問題を根本的に避けられる
+    if (PDF_UPLOAD_URL) {
+      try {
+        const result = await uploadPdfAndGetUrl(blob, filename);
+        if (result && result.url) {
+          await showPdfLink(result.url, filename);
+          return;
+        }
+      } catch (uploadErr) {
+        console.error('PDFアップロードに失敗。端末上での共有/ダウンロードにフォールバックします。', uploadErr);
+      }
+    }
+
+    // 2) フォールバック：端末上でその場共有／ダウンロード
+    const file = new File([blob], filename, { type: 'application/pdf' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: filename });
@@ -772,6 +877,20 @@ async function outputPdf(withPhotos) {
     container.innerHTML = '';
     hideLoading();
   }
+}
+
+// スマホのアプリ内ブラウザ等でBlob共有・ダウンロードがどうしても動かない場合の
+// 最終手段：html2canvas/jsPDFやWeb Share APIを一切使わず、ブラウザ標準の
+// 印刷機能でPDF化する。印刷ダイアログの保存先（宛先）で
+// 「PDFとして保存」（Android）／共有→プリント→2本指でピンチしてプレビュー
+// →共有アイコンで保存（iPhone）を選べば、その場でPDFファイルが作れる。
+function printPdf(withPhotos) {
+  const container = document.getElementById('pagePdf');
+  container.innerHTML = buildPdfHtml(withPhotos);
+  // レイアウト確定を待ってから印刷ダイアログを開く
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    window.print();
+  }));
 }
 
 function v(id) { return document.getElementById(id)?.value?.trim() || ''; }
