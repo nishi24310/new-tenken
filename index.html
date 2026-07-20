@@ -151,16 +151,6 @@ textarea{min-height:72px;resize:vertical;}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(70px);background:#222;color:#fff;padding:11px 22px;border-radius:30px;font-size:13px;font-weight:700;z-index:1000;transition:transform .3s;white-space:nowrap;}
 .toast.on{transform:translateX(-50%) translateY(0);}
 
-/* PDF出力用（印刷時のみ表示） */
-@media print{
-  .hdr,.steps,.nav,.add-photo,.photo-del,.na-row,.st-btn,.loading,.toast{display:none!important;}
-  .page{display:block!important;}
-  #page0,#page1,#page2,#page3,#pageDone{display:none!important;}
-  #pagePdf{display:block!important;}
-  body{background:#fff;padding:0;}
-  .pdf-wrap{max-width:100%;}
-}
-.pdf-wrap{display:none;}
 /* 一時保存 */
 .save-banner{background:linear-gradient(135deg,#1a3a5c,#2a5a8c);color:#fff;border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;display:none;}
 .save-banner.on{display:block;}
@@ -188,7 +178,24 @@ textarea{min-height:72px;resize:vertical;}
 .selected-cust{background:#f0f4ff;border:1.5px solid var(--navy2);border-radius:8px;padding:10px 13px;margin-bottom:10px;display:none;}
 .selected-cust-name{font-weight:800;font-size:14px;color:var(--navy);}
 .selected-cust-meta{font-size:11px;color:var(--muted);margin-top:3px;}
+
+/* ===== PDF帳票レンダリング用（画面には表示しない・html2canvasの撮影対象） ===== */
+#pagePdf{position:fixed;left:-99999px;top:0;width:794px;background:#fff;z-index:-1;}
+#pagePdf .wrap{max-width:720px;margin:0 auto;}
+#pagePdf h1{font-size:15px;text-align:center;border-bottom:2.5px solid #1a3a5c;padding-bottom:7px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;font-family:'Hiragino Sans','Yu Gothic',sans-serif;}
+#pagePdf,#pagePdf *{font-family:'Hiragino Sans','Yu Gothic',sans-serif;font-size:11px;color:#222;box-sizing:border-box;}
+#pagePdf .ht{width:100%;border-collapse:collapse;margin-bottom:12px;}
+#pagePdf .ht td{padding:5px 8px;border:1px solid #ccc;font-size:10.5px;vertical-align:top;}
+#pagePdf .ht .lbl{background:#f0f3f7;font-weight:bold;width:72px;}
+#pagePdf .sec{background:#1a3a5c;color:#fff;padding:5px 10px;margin:12px 0 0;font-weight:bold;font-size:10.5px;}
+#pagePdf table.it{width:100%;border-collapse:collapse;table-layout:fixed;}
+#pagePdf table.it th{background:#e8edf2;padding:6px 8px;border:1px solid #ccc;text-align:left;font-size:10.5px;font-weight:bold;}
+#pagePdf .logo{font-weight:bold;font-size:12px;color:#1a3a5c;margin-bottom:4px;}
+#pagePdf .sign{margin-top:16px;border:1px solid #ccc;padding:9px 12px;font-size:10.5px;}
+#pagePdf .foot{margin-top:10px;text-align:right;font-size:9px;color:#aaa;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
 </head>
 <body>
 
@@ -373,7 +380,7 @@ textarea{min-height:72px;resize:vertical;}
 
   <div class="nav" style="flex-direction:column;gap:10px;">
    <button class="btn btn-pdf" onclick="onsiteSend()">📤 現地送信：お客様用PDF＋一時保存</button>
-<button class="btn btn-g" onclick="outputPdf(true)">📁 保管用PDF（写真あり）を開く</button>
+<button class="btn btn-g" onclick="outputPdf(true)">📁 保管用PDF（写真あり）を共有・保存</button>
 <button class="btn" style="background:#6b7c93;color:#fff;" onclick="exportJSON()">💾 JSONファイルを出力（PC間転送用）</button>
 <button class="btn btn-s" style="flex:none;width:100%;" onclick="goPage(2)">← 戻る</button>
   </div>
@@ -391,6 +398,9 @@ textarea{min-height:72px;resize:vertical;}
 </div>
 
 </div><!-- /main -->
+
+<!-- PDF帳票レンダリング領域（非表示・html2canvasで撮影してPDF化） -->
+<div id="pagePdf"></div>
 
 <script>
 // ============================================================
@@ -673,12 +683,95 @@ function buildConf() {
 // ============================================================
 // PDF出力
 // ============================================================
-function outputPdf(withPhotos) {
-  const html = buildPdfHtml(withPhotos);
-  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+// ※以前は window.open(blob:text/html) で別タブに帳票を開き、そのタブ内で
+//   html2canvas/jsPDFを読み込んでPDF化していたが、iPhoneでは別タブが単なる
+//   htmlファイルのダウンロードになったり、Android（特にLINE WORKS等の
+//   アプリ内ブラウザ）では「操作をするためのアプリが見つかりません」という
+//   blob:スキームのIntentエラーになる問題があった。
+//   → 別タブを一切使わず、同じページ内の非表示エリアに帳票を描画して
+//     その場でPDF化し、可能ならWeb Share APIで共有、できなければ
+//     同じタブ内でダウンロードする方式に変更。
+function showLoading(msg) {
+  const el = document.getElementById('loading');
+  const txt = document.getElementById('loading-txt');
+  if (txt) txt.textContent = msg || '生成中...';
+  if (el) el.classList.add('on');
+}
+function hideLoading() {
+  const el = document.getElementById('loading');
+  if (el) el.classList.remove('on');
+}
+
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
-  window.open(url, '_blank');
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+async function outputPdf(withPhotos) {
+  const container = document.getElementById('pagePdf');
+  showLoading('PDFを作成中...');
+  try {
+    container.innerHTML = buildPdfHtml(withPhotos);
+
+    // レイアウト確定を待つ（写真はdataURLなので基本即時）
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
+      throw new Error('PDF作成ライブラリの読み込みに失敗しました。通信環境をご確認のうえ、もう一度お試しください。');
+    }
+
+    const canvas = await html2canvas(container.querySelector('.wrap'), {
+      scale: 2, useCORS: true, backgroundColor: '#ffffff'
+    });
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+    const pageWidth = 210, pageHeight = 297;
+    const imgWidth = pageWidth;
+    const imgHeight = canvas.height * imgWidth / canvas.width;
+    let heightLeft = imgHeight, position = 0;
+
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+
+    const blob = pdf.output('blob');
+    const custName = v('f-name') || '未入力';
+    const filename = (withPhotos ? '保管用' : 'お客様用') + '_点検報告書_' + custName + '.pdf';
+    const file = new File([blob], filename, { type: 'application/pdf' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        showToast('✅ PDFを共有しました');
+        return;
+      } catch (shareErr) {
+        if (shareErr && shareErr.name === 'AbortError') {
+          // 共有シートをユーザーがキャンセルした場合は何もしない
+          return;
+        }
+        // 共有に失敗した場合はダウンロードにフォールバック
+      }
+    }
+    downloadBlob(blob, filename);
+    showToast('✅ PDFをダウンロードしました（' + filename + '）');
+  } catch (err) {
+    console.error(err);
+    alert('PDFの作成に失敗しました。\n' + (err && err.message ? err.message : err));
+  } finally {
+    container.innerHTML = '';
+    hideLoading();
+  }
 }
 
 function v(id) { return document.getElementById(id)?.value?.trim() || ''; }
@@ -728,26 +821,7 @@ function buildPdfHtml(withPhotos) {
     : 'background:#c8952a;color:#fff;padding:2px 10px;border-radius:4px;font-size:10px;margin-left:10px;font-weight:bold;';
   const badgeText = withPhotos ? '保管用（写真あり）' : 'お客様用';
 
-  return `<!DOCTYPE html>
-<html lang="ja"><head><meta charset="UTF-8">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
-<style>
-  @page{size:A4;margin:15mm 12mm;}
-  body{font-family:'Hiragino Sans','Yu Gothic',sans-serif;font-size:11px;color:#222;margin:0;padding:0;}
-  .wrap{max-width:720px;margin:0 auto;}
-  h1{font-size:15px;text-align:center;border-bottom:2.5px solid #1a3a5c;padding-bottom:7px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;}
-  .ht{width:100%;border-collapse:collapse;margin-bottom:12px;}
-  .ht td{padding:5px 8px;border:1px solid #ccc;font-size:10.5px;vertical-align:top;}
-  .ht .lbl{background:#f0f3f7;font-weight:bold;width:72px;}
-  .sec{background:#1a3a5c;color:#fff;padding:5px 10px;margin:12px 0 0;font-weight:bold;font-size:10.5px;}
-  table.it{width:100%;border-collapse:collapse;table-layout:fixed;}
-  table.it th{background:#e8edf2;padding:6px 8px;border:1px solid #ccc;text-align:left;font-size:10.5px;font-weight:bold;}
-  .logo{font-weight:bold;font-size:12px;color:#1a3a5c;margin-bottom:4px;}
-  .sign{margin-top:16px;border:1px solid #ccc;padding:9px 12px;font-size:10.5px;}
-  .foot{margin-top:10px;text-align:right;font-size:9px;color:#aaa;}
-</style>
-</head><body><div class="wrap">
+  return `<div class="wrap">
 <div class="logo">■ IE KEIKAKU</div>
 <h1>${S.rep}点検報告書<span style="${badgeStyle}">${badgeText}</span></h1>
 <table class="ht">
@@ -797,74 +871,7 @@ ${v('f-comment') ? `<div class="sec">【総合コメント】</div>
   <p style="margin-top:10px;">${today}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;氏名：${v('f-name')}</p>
 </div>
 <div class="foot">IE KEIKAKU 点検報告システム</div>
-</div>
-<div class="no-print" style="max-width:720px;margin:14px auto 0;">
-  <button id="share-btn" onclick="shareOrPrintReport()" style="width:100%;padding:12px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:bold;">📤 PDFとして共有・送信</button>
-</div>
-<style>@media print { .no-print { display: none !important; } }</style>
-<script>
-function shareOrPrintReport() {
-  var btn = document.getElementById('share-btn');
-  function fallbackDownload(blob, filename, mime) {
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
-  }
-  function shareOrDownloadPdf(blob) {
-    var file = new File([blob], '点検報告書.pdf', { type: 'application/pdf' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file], title: '点検報告書' }).catch(function () {
-        fallbackDownload(blob, '点検報告書.pdf');
-      });
-    } else {
-      fallbackDownload(blob, '点検報告書.pdf');
-    }
-  }
-
-  if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
-    // ライブラリが読み込めなかった場合は印刷画面にフォールバック
-    window.print();
-    return;
-  }
-
-  if (btn) { btn.textContent = '⏳ PDFを作成中...'; btn.disabled = true; }
-
-  html2canvas(document.querySelector('.wrap'), { scale: 2, useCORS: true }).then(function (canvas) {
-    var imgData = canvas.toDataURL('image/jpeg', 0.92);
-    var pdf = new jspdf.jsPDF('p', 'mm', 'a4');
-    var pageWidth = 210;
-    var pageHeight = 297;
-    var imgWidth = pageWidth;
-    var imgHeight = canvas.height * imgWidth / canvas.width;
-    var heightLeft = imgHeight;
-    var position = 0;
-
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-
-    var blob = pdf.output('blob');
-    if (btn) { btn.textContent = '📤 PDFとして共有・送信'; btn.disabled = false; }
-    shareOrDownloadPdf(blob);
-  }).catch(function () {
-    if (btn) { btn.textContent = '📤 PDFとして共有・送信'; btn.disabled = false; }
-    window.print();
-  });
-}
-window.onload = function () {
-  // ライブラリの読み込みを少し待ってから自動実行
-  setTimeout(shareOrPrintReport, 600);
-};
-<\/script>
-</body></html>`;
+</div>`;
 }
 
 // ============================================================
@@ -872,11 +879,9 @@ window.onload = function () {
 // ============================================================
 var SAVE_KEY = 'ie_keikaku_tenken_save';
 
-function onsiteSend() {
-  // お客様用PDFを出力
-  outputPdf(false);
-  sendFaultsToManagementSystem();   //
+async function onsiteSend() {
   // 写真を除いたデータを一時保存（写真はBase64で重いので別途）
+  // → PDF生成より先に必ず保存しておく（PDF作成に失敗してもデータは残るように）
   var saveData = {
     type: S.type,
     rep: S.rep,
@@ -892,10 +897,12 @@ function onsiteSend() {
   };
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
-    showToast('✅ データを一時保存しました。帰社後に写真を追加できます。');
   } catch(e) {
     showToast('保存エラー: ' + e.message);
   }
+  sendFaultsToManagementSystem();   //
+  // お客様用PDFを出力（共有 or ダウンロード）
+  await outputPdf(false);
 }
 
 function checkSavedData() {
